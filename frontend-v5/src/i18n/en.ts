@@ -18,6 +18,7 @@ export default {
   repo: {
     title: 'Repository Path',
     rescan: 'Re-scan',
+    forceRebuild: 'Rebuild Vectors',
     scanning: 'Scanning...',
     automations: 'Automations',
     watchdog: 'File Watcher (watchdog)',

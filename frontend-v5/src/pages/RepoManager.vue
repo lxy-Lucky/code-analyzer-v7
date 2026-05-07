@@ -40,6 +40,14 @@
             >
               {{ scan.isScanning.value ? t('repo.scanning') : t('repo.rescan') }}
             </el-button>
+            <el-tooltip content="忽略文件变更，强制重新生成全部向量" placement="top">
+              <el-button
+                @click="confirmForceRebuild"
+                :disabled="scan.isScanning.value"
+              >
+                {{ t('repo.forceRebuild') }}
+              </el-button>
+            </el-tooltip>
           </div>
 
           <template v-if="scan.isScanning.value || scan.phasesDone.value > 0">
@@ -127,6 +135,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { ElMessageBox } from 'element-plus'
 import { useRepoStore } from '@/stores/repoStore'
 import { useScanProgress } from '@/composables/useScanProgress'
 import { repoApi } from '@/api'
@@ -147,6 +156,19 @@ const hookEnabled  = computed({ get: () => repoStore.hookInstalled, set: () => {
 const hookScript = computed(() =>
   `#!/bin/sh\n# code-analyzer-hook\ncurl -s -X POST http://localhost:8000/api/git/hook-trigger \\\n  -H "Content-Type: application/json" \\\n  -d '{"repo_path": "${repoStore.activeRepo?.path ?? '/your/repo'}"}' > /dev/null 2>&1 || true`,
 )
+
+async function confirmForceRebuild() {
+  try {
+    await ElMessageBox.confirm(
+      '将忽略文件变更状态，对所有代码单元重新生成向量。耗时较长，确认继续？',
+      '重建向量索引',
+      { confirmButtonText: '确认重建', cancelButtonText: '取消', type: 'warning' },
+    )
+    await scan.startScan(true)
+  } catch {
+    // 用户取消
+  }
+}
 
 async function loadReports() {
   if (!repoStore.activeRepoId) return

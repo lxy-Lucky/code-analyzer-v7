@@ -85,7 +85,7 @@ def _update_progress(repo_id: int, evt: dict) -> None:
             p["logs"] = p["logs"][-100:]
 
 
-async def scan_stream(repo_id: int, repo: dict) -> AsyncIterator[bytes]:
+async def scan_stream(repo_id: int, repo: dict, force: bool = False) -> AsyncIterator[bytes]:
     q: asyncio.Queue = asyncio.Queue()
 
     async def push(evt: dict) -> None:
@@ -143,8 +143,23 @@ async def scan_stream(repo_id: int, repo: dict) -> AsyncIterator[bytes]:
                     await _finish(db, repo_id, t_start, updated_file_count, False, push)
                     return
 
+                # force=True: 强制全量重建，忽略增量状态
+                if force:
+                    await push({"type": "warning", "message": "强制全量重建向量索引"})
+                    scan_started_at = "1970-01-01 00:00:00"
+                    async with db.execute(
+                        "SELECT COUNT(*), COUNT(DISTINCT file_path) FROM code_units WHERE repo_id=?",
+                        (repo_id,),
+                    ) as cur:
+                        row = await cur.fetchone()
+                        updated_unit_count = row[0] if row else 0
+                        updated_file_count = row[1] if row else 0
+                    if not updated_unit_count:
+                        await _finish(db, repo_id, t_start, 0, False, push)
+                        return
+
                 # S1/S2: Qdrant 为空但 SQLite 有数据 → 强制全量 re-embed
-                if not updated_unit_count:
+                elif not updated_unit_count:
                     qdrant_count = count_repo_vectors(repo_id)
                     async with db.execute(
                         "SELECT COUNT(*) FROM code_units WHERE repo_id=?", (repo_id,)

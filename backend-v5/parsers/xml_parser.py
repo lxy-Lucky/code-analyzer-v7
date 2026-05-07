@@ -5,7 +5,10 @@ from lxml import etree
 
 
 def _detect_xml_type(root: etree._Element) -> str:
-    tag = root.tag.lower() if root.tag else ""
+    # lxml recover=True 会保留 Comment/PI 节点，其 tag 是 callable 而非 str
+    if not isinstance(root.tag, str):
+        return "generic"
+    tag = root.tag.lower()
     ns = root.nsmap or {}
     attribs = {k.lower(): v for k, v in root.attrib.items()}
 
@@ -27,7 +30,9 @@ def _parse_mybatis(root: etree._Element, ns_prefix: str) -> list[dict[str, Any]]
     namespace = root.get("namespace", "")
     sql_tags = ("select", "insert", "update", "delete")
     for elem in root:
-        local = etree.QName(elem.tag).localname.lower() if elem.tag else ""
+        if not isinstance(elem.tag, str):
+            continue
+        local = etree.QName(elem.tag).localname.lower()
         if local in sql_tags:
             stmt_id = elem.get("id", "unknown")
             qualified = f"{namespace}.{stmt_id}" if namespace else stmt_id
@@ -59,12 +64,15 @@ def _parse_mybatis(root: etree._Element, ns_prefix: str) -> list[dict[str, Any]]
 def _parse_spring_beans(root: etree._Element) -> list[dict[str, Any]]:
     units = []
     for elem in root.iter():
-        local = etree.QName(elem.tag).localname.lower() if elem.tag else ""
+        if not isinstance(elem.tag, str):
+            continue
+        local = etree.QName(elem.tag).localname.lower()
         if local == "bean":
             bean_id = elem.get("id") or elem.get("name", "anonymous")
             class_name = elem.get("class", "")
             scope = elem.get("scope", "singleton")
-            refs = [c.get("ref", "") for c in elem if etree.QName(c.tag).localname == "property" and c.get("ref")]
+            refs = [c.get("ref", "") for c in elem
+                    if isinstance(c.tag, str) and etree.QName(c.tag).localname == "property" and c.get("ref")]
             summary = f"[XML/Spring] bean: {bean_id} | class: {class_name} | scope: {scope}"
             if refs:
                 summary += f" | refs: {', '.join(refs[:4])}"
@@ -187,8 +195,10 @@ def _parse_web_xml(root: etree._Element) -> list[dict[str, Any]]:
 def _parse_generic(root: etree._Element) -> list[dict[str, Any]]:
     units = []
     for i, elem in enumerate(root.iter()):
+        if not isinstance(elem.tag, str):
+            continue
         if len(elem) == 0 and elem.text and elem.text.strip():
-            tag = etree.QName(elem.tag).localname if elem.tag else "element"
+            tag = etree.QName(elem.tag).localname
             val = elem.text.strip()[:200]
             units.append({
                 "language": "xml",

@@ -36,10 +36,10 @@ async def delete_repo(repo_id: int):
 # ── Scan ──────────────────────────────────────────────────────────────────────
 
 @router.post("/repos/{repo_id}/scan")
-async def scan(repo_id: int):
+async def scan(repo_id: int, force: bool = Query(False)):
     repo = await repo_service.get_repo(repo_id)
     return StreamingResponse(
-        scan_service.scan_stream(repo_id, repo),
+        scan_service.scan_stream(repo_id, repo, force=force),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

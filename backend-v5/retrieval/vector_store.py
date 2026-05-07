@@ -141,7 +141,7 @@ def batch_upsert_embeddings(
 
 
 def count_repo_vectors(repo_id: int, client: QdrantClient | None = None) -> int:
-    """返回该 repo 在 sig collection 里的向量数（用于判断 Qdrant 是否为空）。"""
+    """返回该 repo 在 sig collection 里的向量数。collection 不存在视为 0。"""
     try:
         if client is None:
             client = get_qdrant_client()
@@ -152,8 +152,12 @@ def count_repo_vectors(repo_id: int, client: QdrantClient | None = None) -> int:
         )
         return result.count
     except Exception as e:
+        err = str(e)
+        # collection 不存在 = 0 向量，不是错误
+        if "Not found" in err or "doesn't exist" in err or "404" in err:
+            return 0
         logger.warning("count_repo_vectors repo_id=%s error: %s", repo_id, e)
-        return -1  # -1 表示无法判断，调用方应保守处理
+        return -1  # -1 表示 Qdrant 异常，调用方保守处理
 
 
 def delete_vectors_for_files(
@@ -178,6 +182,10 @@ def delete_vectors_for_files(
         try:
             client.delete(collection_name=col, points_selector=batch_filter)
         except Exception as e:
+            err = str(e)
+            # collection 不存在说明还没写过向量，跳过即可
+            if "Not found" in err or "doesn't exist" in err or "404" in err:
+                continue
             logger.warning("delete_vectors_for_files col=%s error: %s", col, e)
 
 

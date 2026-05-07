@@ -18,6 +18,7 @@ export default {
   repo: {
     title: '仓库路径',
     rescan: '重新扫描',
+    forceRebuild: '重建向量',
     scanning: '正在扫描...',
     automations: '自动化选项',
     watchdog: '文件监听（watchdog）',

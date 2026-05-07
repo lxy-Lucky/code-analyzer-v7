@@ -18,6 +18,7 @@ export default {
   repo: {
     title: 'リポジトリパス',
     rescan: '再スキャン',
+    forceRebuild: 'ベクトル再構築',
     scanning: 'スキャン中...',
     automations: '自動化オプション',
     watchdog: 'ファイル監視（watchdog）',

@@ -184,15 +184,16 @@ export function useScanProgress(getRepoId: () => number | null) {
     } catch { /* ignore */ }
   }
 
-  async function startScan() {
+  async function startScan(force = false) {
     const repoId = getRepoId()
     if (!repoId) return
     reset()
     isScanning.value = true
     stopPoll()
 
+    const url = force ? `/repos/${repoId}/scan?force=true` : `/repos/${repoId}/scan`
     await sse.start(
-      `/repos/${repoId}/scan`,
+      url,
       {},
       handleEvent,
       () => { isScanning.value = false; stopPoll() },

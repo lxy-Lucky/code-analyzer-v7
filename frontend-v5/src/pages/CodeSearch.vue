@@ -9,10 +9,10 @@
           clearable
           size="large"
         />
-        <el-select v-model="nResults" style="width:90px" size="large">
-          <el-option :value="5"  label="5 条" />
-          <el-option :value="10" label="10 条" />
-          <el-option :value="20" label="20 条" />
+        <el-select v-model="nResults" style="width:100px" size="large">
+          <el-option :value="5"  :label="t('search.resultCount', { n: 5 })" />
+          <el-option :value="10" :label="t('search.resultCount', { n: 10 })" />
+          <el-option :value="20" :label="t('search.resultCount', { n: 20 })" />
         </el-select>
         <el-button type="primary" size="large" @click="doSearch" :loading="sse.loading.value">
           {{ t('search.btn') }}

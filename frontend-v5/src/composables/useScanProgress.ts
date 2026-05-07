@@ -75,8 +75,8 @@ export function useScanProgress(getRepoId: () => number | null) {
     }
     if (type === 'phase_done' && data.phase === 1) {
       phasesDone.value = 1
-      phaseDataMap.value[1].desc = `更新${data.updated_files}文件 ${data.updated_units}个方法`
-      addLog(`  Phase 1 完成：${data.updated_files} 文件`, 'log-update')
+      phaseDataMap.value[1].desc = t('scan.phase1Done', { files: data.updated_files, units: data.updated_units })
+      addLog(`  ${t('scan.logPhase1Done', { files: data.updated_files })}`, 'log-update')
     }
     if (type === 'filter_done') {
       phasesDone.value = 2
@@ -84,9 +84,9 @@ export function useScanProgress(getRepoId: () => number | null) {
         label: t('scan.phase2'),
         done: data.to_embed as number,
         total: data.total_units as number,
-        desc: `过滤${data.filtered}个，待embed ${data.to_embed}个`,
+        desc: t('scan.phase2Desc', { filtered: data.filtered, toEmbed: data.to_embed }),
       }
-      addLog(`  过滤完成：${data.filtered}个跳过，${data.to_embed}个待embed`, 'log-update')
+      addLog(`  ${t('scan.logPhase2Done', { filtered: data.filtered, toEmbed: data.to_embed })}`, 'log-update')
     }
     if (type === 'embed_progress') {
       phaseDataMap.value[3] = {
@@ -98,8 +98,8 @@ export function useScanProgress(getRepoId: () => number | null) {
     }
     if (type === 'phase_done' && data.phase === 3) {
       phasesDone.value = 3
-      phaseDataMap.value[3].desc = `${(data.embedded as number).toLocaleString()} 向量 ${data.elapsed}s`
-      addLog(`  Embedding完成：${(data.embedded as number).toLocaleString()} 条，${data.elapsed}s`, 'log-update')
+      phaseDataMap.value[3].desc = t('scan.phase3Desc', { embedded: (data.embedded as number).toLocaleString(), elapsed: data.elapsed })
+      addLog(`  ${t('scan.logPhase3Done', { embedded: (data.embedded as number).toLocaleString(), elapsed: data.elapsed })}`, 'log-update')
     }
     if (type === 'qdrant_progress') {
       phaseDataMap.value[4] = {
@@ -111,14 +111,14 @@ export function useScanProgress(getRepoId: () => number | null) {
     }
     if (type === 'phase_done' && data.phase === 4) {
       phasesDone.value = 4
-      phaseDataMap.value[4].desc = `写入 ${(data.written as number).toLocaleString()} 条`
-      addLog(`  Qdrant写入完成：${(data.written as number).toLocaleString()} 条`, 'log-update')
+      phaseDataMap.value[4].desc = t('scan.phase4Desc', { written: (data.written as number).toLocaleString() })
+      addLog(`  ${t('scan.logPhase4Done', { written: (data.written as number).toLocaleString() })}`, 'log-update')
     }
     if (type === 'scan_complete') {
       currentPhase.value = 5
       isScanning.value = false
       addLog(
-        `✓ 完成！耗时 ${data.elapsed}s，embed ${((data.total_embedded as number) ?? 0).toLocaleString()} 条`,
+        t('scan.logComplete', { elapsed: data.elapsed, total: ((data.total_embedded as number) ?? 0).toLocaleString() }),
         'log-update',
       )
     }

@@ -160,13 +160,13 @@ const hookScript = computed(() =>
 async function confirmForceRebuild() {
   try {
     await ElMessageBox.confirm(
-      '将忽略文件变更状态，对所有代码单元重新生成向量。耗时较长，确认继续？',
-      '重建向量索引',
-      { confirmButtonText: '确认重建', cancelButtonText: '取消', type: 'warning' },
+      t('repo.forceRebuildMsg'),
+      t('repo.forceRebuildTitle'),
+      { confirmButtonText: t('repo.forceRebuildOk'), cancelButtonText: t('common.cancel'), type: 'warning' },
     )
     await scan.startScan(true)
   } catch {
-    // 用户取消
+    // cancelled
   }
 }
 

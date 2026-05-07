@@ -316,7 +316,7 @@ watch(() => repoStore.activeRepoId, () => {
 
 // .analysis-layout { display: grid; grid-template-columns: 280px 1fr 1.4fr; gap: 14px; }
 .analysis-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-analysis-layout2 { display: grid; grid-template-columns: 1fr; gap: 14px; }
+.analysis-layout2 { display: grid; grid-template-columns: 1fr; gap: 14px; }
 .analysis-col {
   background: var(--el-bg-color); border: $border; border-radius: $radius-lg;
   padding: 14px 16px; overflow-y: auto; max-height: 520px;

@@ -229,13 +229,13 @@ function switchLang(l: 'zh' | 'en' | 'ja') {
 async function confirmDeleteRepo(repo: { id: number; name: string }) {
   try {
     await ElMessageBox.confirm(
-      `确认删除仓库「${repo.name}」？\n相关 SQLite 数据和 Qdrant 向量将一并清除，不可恢复。`,
-      '删除仓库',
-      { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' },
+      t('repo.deleteMsg', { name: repo.name }),
+      t('repo.deleteTitle'),
+      { confirmButtonText: t('repo.deleteOk'), cancelButtonText: t('common.cancel'), type: 'warning' },
     )
     await repoStore.removeRepo(repo.id)
   } catch {
-    // 用户点取消，忽略
+    // cancelled
   }
 }
 

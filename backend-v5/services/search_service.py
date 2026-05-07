@@ -25,7 +25,7 @@ async def search_stream(
                 qn = hit.get("qualified_name", "")
                 if not qn:
                     continue
-                cached = await get_cached(repo_id, qn, db)
+                cached = await get_cached(repo_id, qn, db, lang=lang)
                 if cached:
                     hit["llm_summary"] = cached["llm_summary"]
                     hit["llm_tags"] = cached["llm_tags"]
@@ -36,6 +36,7 @@ async def search_stream(
                         qualified_name=qn,
                         signature=hit.get("signature", ""),
                         body_text=hit.get("body_text", ""),
+                        lang=lang,
                     )
 
             yield f"data: {json.dumps({'type': 'hits', 'hits': hits}, ensure_ascii=False)}\n\n"

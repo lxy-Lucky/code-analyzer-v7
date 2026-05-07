@@ -1,0 +1,68 @@
+@use './variables' as *;
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  background: var(--el-bg-color-page);
+  color: var(--el-text-color-primary);
+  height: 100vh;
+  overflow: hidden;
+}
+
+#app { height: 100vh; display: flex; flex-direction: column; }
+
+.mono { font-family: $font-mono; }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 500;
+
+  &--java    { background: $purple-50; color: $purple-800; }
+  &--jsp     { background: #FAEEDA;    color: #633806; }
+  &--js      { background: #FAEEDA;    color: #633806; }
+  &--xml     { background: $teal-50;   color: $teal-600; }
+  &--success { background: $teal-50;   color: $teal-600; }
+  &--error   { background: #FCEBEB;    color: #A32D2D; }
+  &--warn    { background: #FAEEDA;    color: #854F0B; }
+}
+
+.pulse { animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+.card {
+  background: var(--el-bg-color);
+  border: $border;
+  border-radius: $radius-lg;
+  padding: 16px;
+}
+
+.section-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--el-text-color-primary);
+  margin-bottom: 12px;
+}
+
+.code-block {
+  background: var(--el-fill-color-light);
+  border-radius: $radius-md;
+  padding: 8px 12px;
+  font-family: $font-mono;
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
+  line-height: 1.8;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.el-button { font-size: 12px; }
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--el-border-color); border-radius: 2px; }

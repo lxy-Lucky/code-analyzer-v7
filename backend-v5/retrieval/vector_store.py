@@ -11,7 +11,7 @@ from typing import Any, Callable
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance, VectorParams, PointStruct,
-    Filter, FieldCondition, MatchValue,
+    Filter, FieldCondition, MatchValue, MatchAny,
     FilterSelector,
 )
 
@@ -161,25 +161,24 @@ def delete_vectors_for_files(
     file_paths: list[str],
     client: QdrantClient | None = None,
 ) -> None:
-    """删除指定文件的旧向量（增量扫描前调用，清理已删除/改名的方法）。"""
+    """删除指定文件的旧向量（增量扫描前调用，清理已删除/改名的方法）。
+    用 MatchAny 一次请求删掉所有文件，而不是串行逐文件发请求。
+    """
     if not file_paths:
         return
     if client is None:
         client = get_qdrant_client()
+    batch_filter = FilterSelector(
+        filter=Filter(must=[
+            FieldCondition(key="repo_id",   match=MatchValue(value=repo_id)),
+            FieldCondition(key="file_path", match=MatchAny(any=file_paths)),
+        ])
+    )
     for col in (config.QDRANT_COLLECTION_SIG, config.QDRANT_COLLECTION_CTX):
-        for fp in file_paths:
-            try:
-                client.delete(
-                    collection_name=col,
-                    points_selector=FilterSelector(
-                        filter=Filter(must=[
-                            FieldCondition(key="repo_id",   match=MatchValue(value=repo_id)),
-                            FieldCondition(key="file_path", match=MatchValue(value=fp)),
-                        ])
-                    ),
-                )
-            except Exception as e:
-                logger.warning("delete_vectors_for_files col=%s file=%s error: %s", col, fp, e)
+        try:
+            client.delete(collection_name=col, points_selector=batch_filter)
+        except Exception as e:
+            logger.warning("delete_vectors_for_files col=%s error: %s", col, e)
 
 
 def delete_repo_vectors(repo_id: int, client: QdrantClient | None = None):

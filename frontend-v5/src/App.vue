@@ -53,6 +53,7 @@
             <span class="repo-dot" :style="{ background: repoColor(repo.id) }"></span>
             <span class="repo-name">{{ repo.name }}</span>
             <span class="repo-meta">{{ repo.path.split('/').pop() }}</span>
+            <span class="repo-delete" @click.stop="confirmDeleteRepo(repo)" title="删除仓库">×</span>
           </div>
           <div class="add-repo-btn" @click="showAddRepo = true">
             <span>+</span> {{ t('sidebar.addRepo') }}
@@ -121,7 +122,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElNotification } from 'element-plus'
+import { ElNotification, ElMessageBox } from 'element-plus'
 import { useRepoStore } from '@/stores/repoStore'
 import { useSettingStore } from '@/stores/settingStore'
 import { healthApi } from '@/api'
@@ -221,6 +222,21 @@ function connectSSE() {
 function switchLang(l: 'zh' | 'en' | 'ja') {
   locale.value = l
   settingStore.setLang(l)
+}
+
+// ── Delete repo ───────────────────────────────────────────────────────────────
+
+async function confirmDeleteRepo(repo: { id: number; name: string }) {
+  try {
+    await ElMessageBox.confirm(
+      `确认删除仓库「${repo.name}」？\n相关 SQLite 数据和 Qdrant 向量将一并清除，不可恢复。`,
+      '删除仓库',
+      { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' },
+    )
+    await repoStore.removeRepo(repo.id)
+  } catch {
+    // 用户点取消，忽略
+  }
 }
 
 // ── Add repo ──────────────────────────────────────────────────────────────────
@@ -397,6 +413,21 @@ onUnmounted(() => {
 .repo-dot  { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .repo-name { font-size: 12px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .repo-meta { font-size: 11px; color: var(--el-text-color-placeholder); }
+.repo-delete {
+  opacity: 0;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  line-height: 16px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--el-text-color-placeholder);
+  border-radius: 3px;
+  transition: opacity .15s, color .15s, background .15s;
+  cursor: pointer;
+  &:hover { color: #A32D2D; background: #fde8e8; }
+}
+.repo-item:hover .repo-delete { opacity: 1; }
 
 .add-repo-btn {
   display: flex;

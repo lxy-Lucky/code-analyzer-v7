@@ -4,6 +4,7 @@ from typing import Any
 
 from core.db import get_db
 from core.errors import bad_request, repo_not_found
+from retrieval.vector_store import delete_repo_vectors, check_qdrant_available
 
 
 async def list_repos() -> list[dict]:
@@ -29,6 +30,9 @@ async def create_repo(name: str, path: str) -> dict:
 
 
 async def delete_repo(repo_id: int) -> None:
+    # 先清 Qdrant 向量（SQLite 子表通过 CASCADE 自动清理）
+    if check_qdrant_available():
+        delete_repo_vectors(repo_id)
     async with get_db() as db:
         await db.execute("DELETE FROM repos WHERE id=?", (repo_id,))
         await db.commit()

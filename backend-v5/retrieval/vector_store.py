@@ -140,6 +140,48 @@ def batch_upsert_embeddings(
             progress_cb(done, total)
 
 
+def count_repo_vectors(repo_id: int, client: QdrantClient | None = None) -> int:
+    """返回该 repo 在 sig collection 里的向量数（用于判断 Qdrant 是否为空）。"""
+    try:
+        if client is None:
+            client = get_qdrant_client()
+        result = client.count(
+            collection_name=config.QDRANT_COLLECTION_SIG,
+            count_filter=Filter(must=[FieldCondition(key="repo_id", match=MatchValue(value=repo_id))]),
+            exact=True,
+        )
+        return result.count
+    except Exception as e:
+        logger.warning("count_repo_vectors repo_id=%s error: %s", repo_id, e)
+        return -1  # -1 表示无法判断，调用方应保守处理
+
+
+def delete_vectors_for_files(
+    repo_id: int,
+    file_paths: list[str],
+    client: QdrantClient | None = None,
+) -> None:
+    """删除指定文件的旧向量（增量扫描前调用，清理已删除/改名的方法）。"""
+    if not file_paths:
+        return
+    if client is None:
+        client = get_qdrant_client()
+    for col in (config.QDRANT_COLLECTION_SIG, config.QDRANT_COLLECTION_CTX):
+        for fp in file_paths:
+            try:
+                client.delete(
+                    collection_name=col,
+                    points_selector=FilterSelector(
+                        filter=Filter(must=[
+                            FieldCondition(key="repo_id",   match=MatchValue(value=repo_id)),
+                            FieldCondition(key="file_path", match=MatchValue(value=fp)),
+                        ])
+                    ),
+                )
+            except Exception as e:
+                logger.warning("delete_vectors_for_files col=%s file=%s error: %s", col, fp, e)
+
+
 def delete_repo_vectors(repo_id: int, client: QdrantClient | None = None):
     if client is None:
         client = get_qdrant_client()

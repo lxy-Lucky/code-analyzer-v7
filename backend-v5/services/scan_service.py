@@ -17,6 +17,7 @@ from indexer.scanner import scan_repo
 from indexer.embedder import embed_units_gpu, should_embed
 from retrieval.vector_store import (
     check_qdrant_available, get_qdrant_client, stream_upsert_embeddings,
+    count_repo_vectors, delete_vectors_for_files,
 )
 
 logger = logging.getLogger("scan_service")
@@ -118,9 +119,12 @@ async def scan_stream(repo_id: int, repo: dict) -> AsyncIterator[bytes]:
 
                 # Phase 1
                 await push({"type": "phase", "phase": 1, "label": "文件扫描"})
+                updated_file_paths: list[str] = []
                 async for evt in scan_repo(repo_id, repo["path"], db):
                     await broadcast({**evt, "repo_id": repo_id})
                     await push(evt)
+                    if evt.get("status") == "updated" and evt.get("file"):
+                        updated_file_paths.append(evt["file"])
 
                 async with db.execute(
                     "SELECT COUNT(*), COUNT(DISTINCT file_path) FROM code_units "
@@ -135,9 +139,33 @@ async def scan_stream(repo_id: int, repo: dict) -> AsyncIterator[bytes]:
                             "updated_files": updated_file_count,
                             "updated_units": updated_unit_count})
 
-                if not qdrant_ok or not updated_unit_count:
+                if not qdrant_ok:
                     await _finish(db, repo_id, t_start, updated_file_count, False, push)
                     return
+
+                # S1/S2: Qdrant 为空但 SQLite 有数据 → 强制全量 re-embed
+                if not updated_unit_count:
+                    qdrant_count = count_repo_vectors(repo_id)
+                    async with db.execute(
+                        "SELECT COUNT(*) FROM code_units WHERE repo_id=?", (repo_id,)
+                    ) as cur:
+                        row = await cur.fetchone()
+                        sqlite_count = row[0] if row else 0
+
+                    if qdrant_count == 0 and sqlite_count > 0:
+                        await push({"type": "warning",
+                                    "message": f"Qdrant 向量为空，SQLite 有 {sqlite_count} 个单元，强制全量重建向量索引"})
+                        scan_started_at = "1970-01-01 00:00:00"
+                        async with db.execute(
+                            "SELECT COUNT(*), COUNT(DISTINCT file_path) FROM code_units WHERE repo_id=?",
+                            (repo_id,),
+                        ) as cur:
+                            row = await cur.fetchone()
+                            updated_unit_count = row[0] if row else 0
+                            updated_file_count = row[1] if row else 0
+                    else:
+                        await _finish(db, repo_id, t_start, updated_file_count, False, push)
+                        return
 
                 # Phase 2 — 分页统计 embeddable
                 await push({"type": "phase", "phase": 2, "label": "方法过滤"})
@@ -168,6 +196,15 @@ async def scan_stream(repo_id: int, repo: dict) -> AsyncIterator[bytes]:
                 if not embed_total:
                     await _finish(db, repo_id, t_start, updated_file_count, False, push)
                     return
+
+                # S3: 增量扫描前删掉已更新文件的旧向量，清理改名/删除的方法
+                if updated_file_paths:
+                    loop_now = asyncio.get_running_loop()
+                    client_pre = get_qdrant_client()
+                    await loop_now.run_in_executor(
+                        None,
+                        lambda fps=updated_file_paths: delete_vectors_for_files(repo_id, fps, client_pre),
+                    )
 
                 # Phase 3+4 — 三级生产者-消费者流水线
                 # 读取(SQLite) → read_q → GPU embed → upsert_q → Qdrant写入

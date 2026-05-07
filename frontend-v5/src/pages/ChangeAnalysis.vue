@@ -57,6 +57,33 @@
           {{ t('analysis.noChanges') }}
         </div>
 
+        <!-- 诊断面板：仅在分析结果为空时显示，帮助定位哪一步没有数据 -->
+        <div v-if="searched && !gitSSE.loading.value && !chains.length" class="diag-panel">
+          <div class="diag-title">🔍 诊断信息</div>
+          <div v-if="diagError" class="diag-row diag-error">
+            ❌ 后端异常：{{ diagError }}
+          </div>
+          <div class="diag-row">
+            <span class="diag-label">Git diff 检测到的文件</span>
+            <span v-if="diagDiffFiles.length" class="diag-ok">{{ diagDiffFiles.length }} 个：{{ diagDiffFiles.join(', ') }}</span>
+            <span v-else class="diag-warn">
+              0 个 ——
+              若你修改的文件已 commit，请改用「Commit」模式；
+              若未 commit，请确保文件已保存且未被 .gitignore 忽略。
+            </span>
+          </div>
+          <div class="diag-row">
+            <span class="diag-label">匹配到的变更方法</span>
+            <span v-if="diagChangedMethods.length" class="diag-ok">{{ diagChangedMethods.length }} 个</span>
+            <span v-else-if="diagDiffFiles.length" class="diag-warn">
+              0 个 ——
+              git diff 找到了文件但 DB 中未匹配到对应 code_units，
+              请重新扫描该仓库。
+            </span>
+            <span v-else class="diag-dim">—</span>
+          </div>
+        </div>
+
         <div v-if="chains.length || gitSSE.loading.value || watchSSE.loading.value" class="analysis-layout">
           <!-- 左：变更方法 -->
           <div class="analysis-col">
@@ -166,6 +193,11 @@ const aiText     = ref('')
 const reports    = ref<AnalysisReport[]>([])
 const watchedQnames = ref<string[]>([])
 
+// 诊断信息：显示 diff/changed_methods/error 等中间事件
+const diagDiffFiles     = ref<string[]>([])
+const diagChangedMethods = ref<string[]>([])
+const diagError         = ref('')
+
 function shortName(qn: string): string {
   const parts = qn.split('#')
   if (parts.length === 2) {
@@ -180,6 +212,9 @@ async function runGitAnalysis() {
   searched.value = true
   chains.value   = []
   aiText.value   = ''
+  diagDiffFiles.value      = []
+  diagChangedMethods.value = []
+  diagError.value          = ''
 
   const body: Record<string, unknown> = { lang: settingStore.lang }
   if (diffMode.value === 'head') {
@@ -194,8 +229,11 @@ async function runGitAnalysis() {
     `/repos/${repoStore.activeRepoId}/analysis`,
     body,
     (data) => {
-      if (data.type === 'impact') chains.value = data.chains as ImpactChain[]
-      if (data.type === 'chunk')  aiText.value += data.text as string
+      if (data.type === 'impact')          chains.value = data.chains as ImpactChain[]
+      if (data.type === 'chunk')           aiText.value += data.text as string
+      if (data.type === 'diff')            diagDiffFiles.value = (data.files as string[]) ?? []
+      if (data.type === 'changed_methods') diagChangedMethods.value = (data.methods as string[]) ?? []
+      if (data.type === 'error')           diagError.value = data.error as string ?? 'unknown error'
     },
     () => loadReports(),
   )
@@ -351,6 +389,19 @@ watch(() => repoStore.activeRepoId, () => {
 }
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
 
-.empty-tip  { color: var(--el-text-color-placeholder); font-size: 13px; padding: 40px 0; text-align: center; }
+.empty-tip  { color: var(--el-text-color-placeholder); font-size: 13px; padding: 20px 0; text-align: center; }
 .report-row { display: flex; align-items: center; padding: 6px 0; border-bottom: $border; }
+
+.diag-panel {
+  margin-top: 8px; padding: 12px 16px;
+  background: #FAFAFA; border: 1px solid #E4E7ED; border-radius: 8px;
+  font-size: 12px;
+}
+.diag-title  { font-weight: 600; margin-bottom: 8px; color: #303133; }
+.diag-row    { display: flex; gap: 12px; align-items: flex-start; padding: 4px 0; flex-wrap: wrap; }
+.diag-label  { color: #606266; flex-shrink: 0; min-width: 160px; }
+.diag-ok     { color: #67C23A; }
+.diag-warn   { color: #E6A23C; }
+.diag-dim    { color: #C0C4CC; }
+.diag-error  { color: #F56C6C; font-weight: 500; }
 </style>

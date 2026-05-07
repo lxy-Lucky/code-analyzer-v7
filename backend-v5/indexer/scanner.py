@@ -354,8 +354,6 @@ async def get_changed_files_units(
                     )
         await db.commit()
 
-        print(f"[watch] file={rel_path} old_units={len(old_body_hashes)} new_units={len(units)}", flush=True)
-
         for unit in units:
             qn  = unit["qualified_name"]
             sig = unit.get("signature", "") or ""
@@ -363,15 +361,11 @@ async def get_changed_files_units(
             new_bh = _body_hash(unit)
             old_bh = old_body_hashes.get(key)
             if old_bh is None:
-                print(f"[watch] NEW     {qn}  sig={sig!r}", flush=True)
                 unit["file_path"] = rel_path
                 all_changed_units.append(unit)
             elif old_bh != new_bh:
                 body = (unit.get("body_text") or "")[:80].replace("\n", "↵")
-                print(f"[watch] CHANGED {qn}\n  old={old_bh}\n  new={new_bh}\n  sig={sig!r}\n  body={body!r}", flush=True)
                 unit["file_path"] = rel_path
                 all_changed_units.append(unit)
-            else:
-                print(f"[watch] ok      {qn}  sig={sig!r}", flush=True)
 
     return all_changed_units

@@ -57,33 +57,6 @@
           {{ t('analysis.noChanges') }}
         </div>
 
-        <!-- 诊断面板：仅在分析结果为空时显示，帮助定位哪一步没有数据 -->
-        <div v-if="searched && !gitSSE.loading.value && !chains.length" class="diag-panel">
-          <div class="diag-title">🔍 诊断信息</div>
-          <div v-if="diagError" class="diag-row diag-error">
-            ❌ 后端异常：{{ diagError }}
-          </div>
-          <div class="diag-row">
-            <span class="diag-label">Git diff 检测到的文件</span>
-            <span v-if="diagDiffFiles.length" class="diag-ok">{{ diagDiffFiles.length }} 个：{{ diagDiffFiles.join(', ') }}</span>
-            <span v-else class="diag-warn">
-              0 个 ——
-              若你修改的文件已 commit，请改用「Commit」模式；
-              若未 commit，请确保文件已保存且未被 .gitignore 忽略。
-            </span>
-          </div>
-          <div class="diag-row">
-            <span class="diag-label">匹配到的变更方法</span>
-            <span v-if="diagChangedMethods.length" class="diag-ok">{{ diagChangedMethods.length }} 个</span>
-            <span v-else-if="diagDiffFiles.length" class="diag-warn">
-              0 个 ——
-              git diff 找到了文件但 DB 中未匹配到对应 code_units，
-              请重新扫描该仓库。
-            </span>
-            <span v-else class="diag-dim">—</span>
-          </div>
-        </div>
-
         <div v-if="chains.length || gitSSE.loading.value || watchSSE.loading.value" class="analysis-layout">
           <!-- 左：变更方法 -->
           <div class="analysis-col">
@@ -137,7 +110,10 @@
               <div v-else class="no-impact">{{ t('analysis.noUpstream') }}</div>
             </div>
           </div>
-
+        </div>
+        <div
+        v-if="chains.length || gitSSE.loading.value || watchSSE.loading.value" class="analysis-layout2"
+        style="margin-top:10px">
           <!-- 右：AI 报告 -->
           <div class="analysis-col">
             <div class="col-title">{{ t('analysis.report') }}</div>
@@ -338,7 +314,9 @@ watch(() => repoStore.activeRepoId, () => {
 .dot-pulse  { width: 6px; height: 6px; border-radius: 50%; background: #1D9E75; animation: pulse 2s infinite; }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
-.analysis-layout { display: grid; grid-template-columns: 280px 1fr 1.4fr; gap: 14px; }
+// .analysis-layout { display: grid; grid-template-columns: 280px 1fr 1.4fr; gap: 14px; }
+.analysis-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+analysis-layout2 { display: grid; grid-template-columns: 1fr; gap: 14px; }
 .analysis-col {
   background: var(--el-bg-color); border: $border; border-radius: $radius-lg;
   padding: 14px 16px; overflow-y: auto; max-height: 520px;

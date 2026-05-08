@@ -41,7 +41,7 @@ def _parse_mybatis(root: etree._Element) -> list[dict[str, Any]]:
             stmt_id = elem.get("id", "unknown")
             qualified = f"{namespace}.{stmt_id}" if namespace else stmt_id
             # ④ 用 itertext() 收集包含动态子标签（<if>/<foreach>/<where>）的完整 SQL
-            sql_text = "".join(elem.itertext()).strip()[:500]
+            sql_text = "".join(elem.itertext()).strip()[:3000]
             param_type = elem.get("parameterType", "")
             result_type = elem.get("resultType", elem.get("resultMap", ""))
             unit_type = f"mybatis_{local}" if local != "sql" else "mybatis_sql_fragment"
@@ -226,7 +226,7 @@ def _parse_generic(root: etree._Element) -> list[dict[str, Any]]:
             continue
         if len(elem) == 0 and elem.text and elem.text.strip():
             tag = etree.QName(elem.tag).localname
-            val = elem.text.strip()[:200]
+            val = elem.text.strip()[:2000]
             units.append({
                 "language": "xml",
                 "unit_type": "xml_element",

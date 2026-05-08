@@ -174,8 +174,8 @@ def parse_jsp(file_path: str) -> list[dict[str, Any]]:
     units: list[dict[str, Any]] = []
     units.extend(_extract_declarations(content_stripped))
     units.extend(_extract_scriptlets(content_stripped))
-    units.extend(_extract_el_expressions(content_stripped))
-    units.extend(_extract_custom_tags(content_stripped))
+    # custom_tag（<html:image>/<bean:write> 等）和 el_expression（${...}）
+    # 信息量极低且数量极多，会在向量空间里淹没真正的业务逻辑，不再索引
 
     # deduplicate qualified names with counter
     seen_qnames: dict[str, int] = {}

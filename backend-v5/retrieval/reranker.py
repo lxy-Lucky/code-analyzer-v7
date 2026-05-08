@@ -13,7 +13,7 @@ def _build_doc_text(hit: dict[str, Any]) -> str:
     """问题1修复：doc 侧加入 body_text 前300字，提升精排质量。"""
     sig   = hit.get("signature") or hit.get("qualified_name", "")
     summ  = hit.get("summary", "") or ""
-    body  = (hit.get("body_text") or "")[:300]
+    body  = (hit.get("body_text") or "")[:1500]
     return f"{sig}\n{summ}\n{body}".strip()
 
 

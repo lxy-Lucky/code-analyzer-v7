@@ -151,7 +151,7 @@ async def _keyword_search(
                 "qualified_name": row[0], "name": row[1],
                 "language": row[2],       "unit_type": row[3],
                 "file_path": row[4],      "start_line": row[5],
-                "end_line": row[6],       "body_text": (row[7] or "")[:500],
+                "end_line": row[6],       "body_text": (row[7] or ""),
                 "signature": row[8],      "summary": row[9],
                 "rrf_score": 0.01,        "_source": "keyword",
             })
@@ -197,7 +197,7 @@ async def search_code(
     for hit in vec_hits:
         row = detail_map.get(hit.get("qualified_name", ""))
         if row:
-            hit["body_text"]  = (row[1] or "")[:500]
+            hit["body_text"]  = (row[1] or "")
             hit["start_line"] = row[2]
             hit["end_line"]   = row[3]
             hit["file_path"]  = row[4]

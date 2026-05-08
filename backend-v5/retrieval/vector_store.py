@@ -34,11 +34,18 @@ def _ensure_collections(client: QdrantClient):
     existing = {c.name for c in client.get_collections().collections}
     for col in (config.QDRANT_COLLECTION_SIG, config.QDRANT_COLLECTION_CTX):
         if col not in existing:
-            client.create_collection(
-                collection_name=col,
-                vectors_config=VectorParams(size=config.EMBED_DIMENSIONS, distance=Distance.COSINE),
-            )
-            logger.info("Created collection: %s", col)
+            try:
+                client.create_collection(
+                    collection_name=col,
+                    vectors_config=VectorParams(size=config.EMBED_DIMENSIONS, distance=Distance.COSINE),
+                )
+                logger.info("Created collection: %s", col)
+            except Exception as e:
+                # 并发场景下另一线程可能已创建，409 Conflict 直接忽略
+                if "already exists" in str(e) or "409" in str(e) or "Conflict" in str(e):
+                    logger.debug("Collection %s already exists (concurrent create), skipped", col)
+                else:
+                    raise
 
 
 def _point_id(repo_id: int, qualified_name: str) -> str:

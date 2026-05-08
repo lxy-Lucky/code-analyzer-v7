@@ -109,8 +109,8 @@ async def scan_stream(repo_id: int, repo: dict, force: bool = False) -> AsyncIte
                     (scan_started_at, repo_id),
                 )
                 await db.commit()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error("Failed to set scan_status=scanning repo_id=%s: %s", repo_id, e)
 
             try:
                 qdrant_ok = check_qdrant_available()
@@ -337,8 +337,8 @@ async def scan_stream(repo_id: int, repo: dict, force: bool = False) -> AsyncIte
                         "WHERE id=?", (repo_id,),
                     )
                     await db.commit()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.error("Failed to set scan_status=done repo_id=%s: %s", repo_id, e)
 
             except Exception as e:
                 logger.exception("scan_stream error repo_id=%s", repo_id)
@@ -348,8 +348,8 @@ async def scan_stream(repo_id: int, repo: dict, force: bool = False) -> AsyncIte
                         "UPDATE repos SET scan_status='error' WHERE id=?", (repo_id,)
                     )
                     await db.commit()
-                except Exception:
-                    pass
+                except Exception as db_e:
+                    logger.error("Failed to set scan_status=error repo_id=%s: %s", repo_id, db_e)
             finally:
                 gc.collect()
                 await q.put(("done", None))
@@ -393,6 +393,6 @@ async def _finish(
             (repo_id,),
         )
         await db.commit()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error("Failed to set scan_status=done in _finish repo_id=%s: %s", repo_id, e)
     gc.collect()

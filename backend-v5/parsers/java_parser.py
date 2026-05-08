@@ -132,8 +132,11 @@ def _extract_params(
 def _strip_large_array_initializer(src: bytes, enc: str) -> bytes:
     text = src.decode(enc, errors="replace")
 
+    # ⑯ 泛化为匹配任意基本类型的多维数组大初始化器，不只是 char[][][]
     pattern = re.compile(
-        r'(private\s+static\s+final\s+char\s*\[]\s*\[]\s*\[]\s+\w+\s*=\s*new\s+char\s*\[]\s*\[]\s*\[]\s*\{)',
+        r'((?:private|public|protected)?\s+static\s+final\s+'
+        r'(?:char|byte|int|long|short|boolean|String)\s*(?:\[\]\s*)+'
+        r'\w+\s*=\s*(?:new\s+(?:char|byte|int|long|short|boolean|String)\s*(?:\[\]\s*)+)?\{)',
         re.DOTALL
     )
 

@@ -142,12 +142,16 @@ async def scan_repo(
     ) as cur:
         existing = {row[0]: row[1] async for row in cur}
 
+    # ⑪ 并发计算所有文件 MD5，不再串行 await
+    rel_paths = [
+        str(Path(fp).relative_to(repo_path)).replace("\\", "/")
+        for fp, _ in files
+    ]
+    hash_tasks = [loop.run_in_executor(None, _compute_hash_sync, fp) for fp, _ in files]
+    hashes = await asyncio.gather(*hash_tasks)
+
     to_process = []
-    for file_path, language in files:
-        # 统一使用正斜杠，与 git diff 路径格式保持一致
-        rel_path = str(Path(file_path).relative_to(repo_path)).replace("\\", "/")
-        # MD5 放 executor，不阻塞事件循环；只算一次，后续 _parse_one 直接复用
-        current_hash = await loop.run_in_executor(None, _compute_hash_sync, file_path)
+    for (file_path, language), rel_path, current_hash in zip(files, rel_paths, hashes):
         if existing.get(rel_path) == current_hash:
             skipped += 1
             evt = {"type": "progress", "file": rel_path,
@@ -166,9 +170,16 @@ async def scan_repo(
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
     for (file_path, language, rel_path, _), result in zip(to_process, results):
+        # ⑨ 解析失败记录日志
         if isinstance(result, Exception):
+            logger.warning("parse failed [%s] %s: %s", language, rel_path, result)
             continue
         _, lang, file_hash, units = result
+
+        # ⑩ 解析返回空也不更新 file_hashes，下次扫描仍会重试
+        if not units:
+            logger.debug("parse returned empty units [%s] %s", language, rel_path)
+            continue
 
         await db.execute(
             """INSERT INTO file_hashes(repo_id, file_path, hash, updated_at)

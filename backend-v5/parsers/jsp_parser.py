@@ -5,7 +5,8 @@ from typing import Any
 
 # ① 已移除无用的 tree-sitter import（Language/Parser/JAVA_LANG/_java_parser 从未被调用）
 
-_RE_SCRIPTLET    = re.compile(r"<%(?!=|@)(.*?)%>", re.DOTALL)
+_RE_JSP_COMMENT  = re.compile(r"<%--.*?--%>", re.DOTALL)  # JSP 注释必须在 scriptlet 前排除
+_RE_SCRIPTLET    = re.compile(r"<%(?!=|@|--)(.+?)%>", re.DOTALL)
 # ③ 已知限制：非贪婪匹配在 scriptlet 内含 "%>" 字符串时会误截断（如 String s = "end%>";）
 # 正则无法安全处理此边界情况，需状态机才能完全正确；当前实现对典型代码已足够
 _RE_DECLARATION  = re.compile(r"<%!(.*?)%>", re.DOTALL)  # ② declaration 块（成员/方法声明）
@@ -168,11 +169,13 @@ def _extract_custom_tags(content: str) -> list[dict[str, Any]]:
 def parse_jsp(file_path: str) -> list[dict[str, Any]]:
     raw = Path(file_path).read_bytes()
     content = _decode_with_fallback(raw)
+    # 先剥去 JSP 注释（<%-- ... --%>），避免注释内的 %> 干扰 scriptlet/declaration 正则
+    content_stripped = _RE_JSP_COMMENT.sub("", content)
     units: list[dict[str, Any]] = []
-    units.extend(_extract_declarations(content))   # ② declaration 块优先（含方法定义）
-    units.extend(_extract_scriptlets(content))
-    units.extend(_extract_el_expressions(content))
-    units.extend(_extract_custom_tags(content))
+    units.extend(_extract_declarations(content_stripped))
+    units.extend(_extract_scriptlets(content_stripped))
+    units.extend(_extract_el_expressions(content_stripped))
+    units.extend(_extract_custom_tags(content_stripped))
 
     # deduplicate qualified names with counter
     seen_qnames: dict[str, int] = {}

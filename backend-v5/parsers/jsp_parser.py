@@ -39,23 +39,59 @@ def _decode_with_fallback(raw: bytes) -> str:
     return raw.decode("latin-1", errors="replace")
 
 
+_MIN_SCRIPTLET_LINES = 3    # 有效行数（去空行）少于此值的碎片不单独索引
+_MERGE_LINE_GAP      = 30   # 两个 scriptlet 起始行差距在此范围内则合并
+
+
 def _extract_scriptlets(content: str) -> list[dict[str, Any]]:
-    units = []
-    for i, m in enumerate(_RE_SCRIPTLET.finditer(content)):
+    """
+    提取 scriptlet 并做两步过滤/合并：
+    1. 收集所有非空 scriptlet，记录行号和代码
+    2. 将行距 ≤ _MERGE_LINE_GAP 的相邻 scriptlet 合并为一个逻辑块
+    3. 合并后代码行数 < _MIN_SCRIPTLET_LINES 的碎片丢弃
+    目的：避免 `cel = "A"+(iRow);` 这类单行碎片占据向量搜索结果。
+    """
+    raw: list[tuple[int, int, str]] = []  # (start_line, end_line, code)
+    for m in _RE_SCRIPTLET.finditer(content):
         code = m.group(1).strip()
         if not code:
             continue
-        line_no = content[: m.start()].count("\n") + 1
-        summary = f"[JSP] scriptlet@line{line_no} | code: {code[:80].replace(chr(10), ' ')}"
+        start = content[: m.start()].count("\n") + 1
+        end   = start + code.count("\n")
+        raw.append((start, end, code))
+
+    if not raw:
+        return []
+
+    # 合并相邻碎片
+    groups: list[tuple[int, int, list[str]]] = []
+    g_start, g_end, g_codes = raw[0]
+    g_codes = [raw[0][2]]
+    for start, end, code in raw[1:]:
+        if start - g_end <= _MERGE_LINE_GAP:
+            g_end = max(g_end, end)
+            g_codes.append(code)
+        else:
+            groups.append((g_start, g_end, g_codes))
+            g_start, g_end, g_codes = start, end, [code]
+    groups.append((g_start, g_end, g_codes))
+
+    units = []
+    for idx, (start_line, end_line, codes) in enumerate(groups):
+        merged = "\n".join(codes)
+        effective_lines = sum(1 for l in merged.splitlines() if l.strip())
+        if effective_lines < _MIN_SCRIPTLET_LINES:
+            continue
+        summary = f"[JSP] scriptlet@line{start_line} | code: {merged[:80].replace(chr(10), ' ')}"
         units.append({
             "language": "jsp",
             "unit_type": "scriptlet",
-            "qualified_name": f"scriptlet_{i}_{line_no}",
-            "name": f"scriptlet@line{line_no}",
-            "signature": f"<% ... %> at line {line_no}",
-            "start_line": line_no,
-            "end_line": line_no + code.count("\n"),
-            "body_text": code[:2000],
+            "qualified_name": f"scriptlet_{idx}_{start_line}",
+            "name": f"scriptlet@line{start_line}",
+            "signature": f"<% ... %> at line {start_line}-{end_line}",
+            "start_line": start_line,
+            "end_line": end_line,
+            "body_text": merged[:2000],
             "calls": [],
             "summary": summary,
             "comment": "",

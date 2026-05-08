@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS repos (
     path TEXT NOT NULL UNIQUE,
     scan_status TEXT DEFAULT 'idle',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    scan_started_at TIMESTAMP,
     last_scanned_at TIMESTAMP
 );
 
@@ -64,8 +65,9 @@ CREATE TABLE IF NOT EXISTS analysis_reports (
 
 CREATE INDEX IF NOT EXISTS idx_code_units_repo ON code_units(repo_id);
 CREATE INDEX IF NOT EXISTS idx_code_units_file ON code_units(file_path);
-CREATE INDEX IF NOT EXISTS idx_call_edges_caller ON call_edges(caller_qualified);
-CREATE INDEX IF NOT EXISTS idx_call_edges_callee ON call_edges(callee_qualified);
+CREATE INDEX IF NOT EXISTS idx_code_units_repo_updated ON code_units(repo_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_call_edges_repo_caller ON call_edges(repo_id, caller_qualified);
+CREATE INDEX IF NOT EXISTS idx_call_edges_repo_callee ON call_edges(repo_id, callee_qualified);
 CREATE INDEX IF NOT EXISTS idx_file_hashes_repo ON file_hashes(repo_id);
 
 CREATE TABLE IF NOT EXISTS llm_cache (

@@ -105,8 +105,13 @@ def stream_upsert_embeddings(
         sig_points.append(PointStruct(id=pid, vector=r["sig_vec"], payload=payload))
         ctx_points.append(PointStruct(id=pid, vector=r["ctx_vec"], payload=payload))
 
-    client.upsert(collection_name=config.QDRANT_COLLECTION_SIG, points=sig_points)
-    client.upsert(collection_name=config.QDRANT_COLLECTION_CTX, points=ctx_points)
+    # sig 和 ctx 两个 collection 并发 upsert，时间减半
+    from concurrent.futures import ThreadPoolExecutor as _TPE
+    with _TPE(max_workers=2) as _ex:
+        f_sig = _ex.submit(client.upsert, collection_name=config.QDRANT_COLLECTION_SIG, points=sig_points)
+        f_ctx = _ex.submit(client.upsert, collection_name=config.QDRANT_COLLECTION_CTX, points=ctx_points)
+        f_sig.result()
+        f_ctx.result()
     logger.debug("stream_upsert %d vectors repo_id=%d", len(embed_results), repo_id)
 
 

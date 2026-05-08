@@ -26,6 +26,7 @@ _STREAM_BATCH = max(EMBED_BATCH_SIZE_GPU or 256, 256)
 _DB_PAGE      = 5000
 
 _scan_progress: dict[int, dict[str, Any]] = {}
+_PROGRESS_MAX_REPOS = 20  # 最多保留最近 N 个 repo 的进度，防止内存无限积累
 
 
 def get_scan_progress(repo_id: int) -> dict | None:
@@ -33,6 +34,14 @@ def get_scan_progress(repo_id: int) -> dict | None:
 
 
 def _init_progress(repo_id: int) -> None:
+    # 超过上限时淘汰最旧的 repo（非当前 repo）
+    if len(_scan_progress) >= _PROGRESS_MAX_REPOS and repo_id not in _scan_progress:
+        oldest = next(
+            (k for k in _scan_progress if k != repo_id),
+            None,
+        )
+        if oldest is not None:
+            del _scan_progress[oldest]
     _scan_progress[repo_id] = {
         "status": "scanning",
         "logs": [],
@@ -296,24 +305,47 @@ async def scan_stream(repo_id: int, repo: dict, force: bool = False) -> AsyncIte
                         if results:
                             await upsert_q.put(results)
 
-                # ── 消费者2：Qdrant upsert ──
+                # ── 消费者2：Qdrant upsert（并发，充分利用 upsert_executor 的多个 worker）──
                 async def upserter() -> None:
                     nonlocal upsert_done
                     phase4_started = False
+                    pending_tasks: set[asyncio.Task] = set()
+
+                    async def _submit(batch):
+                        await loop.run_in_executor(
+                            upsert_executor,
+                            lambda b=batch: stream_upsert_embeddings(repo_id, b, client=client),
+                        )
+
                     while True:
                         results = await upsert_q.get()
                         if results is None:
                             break
-                        await loop.run_in_executor(
-                            upsert_executor,
-                            lambda b=results: stream_upsert_embeddings(repo_id, b, client=client),
-                        )
-                        upsert_done += len(results)
                         if not phase4_started:
                             await push({"type": "phase", "phase": 4, "label": "写入Qdrant"})
                             phase4_started = True
+
+                        # 创建并发 upsert task，不立即 await
+                        t = asyncio.create_task(_submit(results))
+                        pending_tasks.add(t)
+
+                        def _on_done(fut, n=len(results)):
+                            nonlocal upsert_done
+                            pending_tasks.discard(fut)
+                            upsert_done += n
+
+                        t.add_done_callback(_on_done)
+
+                        # 达到并发上限时等待最早一批完成，实现背压
+                        if len(pending_tasks) >= QDRANT_UPSERT_CONCURRENCY:
+                            await asyncio.wait(pending_tasks, return_when=asyncio.FIRST_COMPLETED)
+
                         await push({"type": "qdrant_progress", "phase": 4,
                                     "done": upsert_done, "total": embed_total})
+
+                    # 等待所有剩余 upsert 完成
+                    if pending_tasks:
+                        await asyncio.gather(*pending_tasks)
 
                 # 三个协程并发启动，等全部完成
                 await asyncio.gather(reader(), embedder(), upserter())

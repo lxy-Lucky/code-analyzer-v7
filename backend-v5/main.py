@@ -28,3 +28,22 @@ async def startup() -> None:
     await init_db()
     from indexer.embedder import preload
     await preload()
+
+
+@app.on_event("shutdown")
+async def shutdown() -> None:
+    # 等待 GPU executor 当前任务完成，避免 embedding 写到一半
+    from indexer.embedder import _executor
+    if _executor is not None:
+        _executor.shutdown(wait=True)
+
+    # 把进程退出时仍处于 scanning 状态的 repo 重置为 idle，避免 DB 状态卡死
+    from core.db import get_db
+    try:
+        async with get_db() as db:
+            await db.execute(
+                "UPDATE repos SET scan_status='idle' WHERE scan_status='scanning'"
+            )
+            await db.commit()
+    except Exception:
+        pass

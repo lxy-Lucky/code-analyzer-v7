@@ -2,18 +2,19 @@ from __future__ import annotations
 import re
 from pathlib import Path
 from typing import Any
-import tree_sitter_java as tsjava
-from tree_sitter import Language, Parser
 
-JAVA_LANG = Language(tsjava.language())
-_java_parser = Parser(JAVA_LANG)
+# ① 已移除无用的 tree-sitter import（Language/Parser/JAVA_LANG/_java_parser 从未被调用）
 
-_RE_SCRIPTLET = re.compile(r"<%(?!=|@)(.*?)%>", re.DOTALL)
-_RE_EXPR = re.compile(r"\$\{([^}]+)\}", re.DOTALL)
-_RE_JSP_TAG = re.compile(r"<([a-zA-Z]+:[a-zA-Z]+)([^>]*?)(?:/>|>)", re.DOTALL)
+_RE_SCRIPTLET    = re.compile(r"<%(?!=|@)(.*?)%>", re.DOTALL)
+# ③ 已知限制：非贪婪匹配在 scriptlet 内含 "%>" 字符串时会误截断（如 String s = "end%>";）
+# 正则无法安全处理此边界情况，需状态机才能完全正确；当前实现对典型代码已足够
+_RE_DECLARATION  = re.compile(r"<%!(.*?)%>", re.DOTALL)  # ② declaration 块（成员/方法声明）
+_RE_EXPR         = re.compile(r"\$\{([^}]+)\}", re.DOTALL)
+_RE_JSP_TAG      = re.compile(r"<([a-zA-Z]+:[a-zA-Z]+)([^>]*?)(?:/>|>)", re.DOTALL)
 _RE_PAGE_DIRECTIVE = re.compile(r"<%@\s*page([^%]*)%>", re.DOTALL)
-_RE_METHOD = re.compile(
-    r"(public|private|protected|static|void|int|String|boolean|long|Object|List|Map)[^{;]*\([^)]*\)\s*\{",
+_RE_METHOD       = re.compile(
+    r"(public|private|protected|static|void|int|String|boolean|long|Object|List|Map)"
+    r"[^{;]*\([^)]*\)\s*\{",
     re.DOTALL,
 )
 
@@ -58,6 +59,53 @@ def _extract_scriptlets(content: str) -> list[dict[str, Any]]:
             "summary": summary,
             "comment": "",
         })
+    return units
+
+
+def _extract_declarations(content: str) -> list[dict[str, Any]]:
+    """② 提取 <%! declaration %> 块内的 Java 方法声明。"""
+    units = []
+    for i, m in enumerate(_RE_DECLARATION.finditer(content)):
+        block = m.group(1).strip()
+        if not block:
+            continue
+        block_line = content[: m.start()].count("\n") + 1
+        for j, mm in enumerate(_RE_METHOD.finditer(block)):
+            line_offset = block[:mm.start()].count("\n")
+            line_no = block_line + line_offset
+            # 提取到第一个 { 之前作为签名
+            sig = mm.group(0).rstrip("{").strip()
+            # 提取方法体
+            body_start = mm.end() - 1
+            depth = 0
+            body_end = body_start
+            for k, ch in enumerate(block[body_start:], body_start):
+                if ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth == 0:
+                        body_end = k + 1
+                        break
+            body = block[body_start:body_end]
+            end_line = line_no + body.count("\n")
+            # 从签名中提取方法名
+            name_match = re.search(r'(\w+)\s*\(', sig)
+            method_name = name_match.group(1) if name_match else f"declaration_{j}"
+            qn = f"decl_{method_name}_{line_no}"
+            units.append({
+                "language": "jsp",
+                "unit_type": "declaration",
+                "qualified_name": qn,
+                "name": method_name,
+                "signature": sig[:200],
+                "start_line": line_no,
+                "end_line": end_line,
+                "body_text": body[:2000],
+                "calls": [],
+                "summary": f"[JSP] declaration: {sig[:80]} at line {line_no}",
+                "comment": "",
+            })
     return units
 
 
@@ -121,6 +169,7 @@ def parse_jsp(file_path: str) -> list[dict[str, Any]]:
     raw = Path(file_path).read_bytes()
     content = _decode_with_fallback(raw)
     units: list[dict[str, Any]] = []
+    units.extend(_extract_declarations(content))   # ② declaration 块优先（含方法定义）
     units.extend(_extract_scriptlets(content))
     units.extend(_extract_el_expressions(content))
     units.extend(_extract_custom_tags(content))

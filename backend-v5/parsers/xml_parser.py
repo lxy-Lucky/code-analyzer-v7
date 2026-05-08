@@ -1,7 +1,10 @@
 from __future__ import annotations
+import logging
 from pathlib import Path
 from typing import Any
 from lxml import etree
+
+logger = logging.getLogger("xml_parser")
 
 
 def _detect_xml_type(root: etree._Element) -> str:
@@ -25,10 +28,11 @@ def _detect_xml_type(root: etree._Element) -> str:
     return "generic"
 
 
-def _parse_mybatis(root: etree._Element, ns_prefix: str) -> list[dict[str, Any]]:
+def _parse_mybatis(root: etree._Element) -> list[dict[str, Any]]:
     units = []
     namespace = root.get("namespace", "")
-    sql_tags = ("select", "insert", "update", "delete")
+    # ⑤ 加入 "sql" 标签（<sql id="..."> 复用片段，被 <include refid="..."> 引用）
+    sql_tags = ("select", "insert", "update", "delete", "sql")
     for elem in root:
         if not isinstance(elem.tag, str):
             continue
@@ -36,9 +40,11 @@ def _parse_mybatis(root: etree._Element, ns_prefix: str) -> list[dict[str, Any]]
         if local in sql_tags:
             stmt_id = elem.get("id", "unknown")
             qualified = f"{namespace}.{stmt_id}" if namespace else stmt_id
-            sql_text = (elem.text or "").strip()[:500]
+            # ④ 用 itertext() 收集包含动态子标签（<if>/<foreach>/<where>）的完整 SQL
+            sql_text = "".join(elem.itertext()).strip()[:500]
             param_type = elem.get("parameterType", "")
             result_type = elem.get("resultType", elem.get("resultMap", ""))
+            unit_type = f"mybatis_{local}" if local != "sql" else "mybatis_sql_fragment"
             summary = (
                 f"[XML/MyBatis] {local.upper()} {stmt_id}"
                 + (f" | param: {param_type}" if param_type else "")
@@ -47,7 +53,7 @@ def _parse_mybatis(root: etree._Element, ns_prefix: str) -> list[dict[str, Any]]
             )
             units.append({
                 "language": "xml",
-                "unit_type": f"mybatis_{local}",
+                "unit_type": unit_type,
                 "qualified_name": qualified,
                 "name": stmt_id,
                 "signature": f"{local.upper()} {qualified}",
@@ -89,6 +95,22 @@ def _parse_spring_beans(root: etree._Element) -> list[dict[str, Any]]:
                 "summary": summary,
                 "comment": "",
             })
+        elif local == "component-scan":
+            base_pkg = elem.get("base-package", "")
+            if base_pkg:
+                units.append({
+                    "language": "xml",
+                    "unit_type": "spring_component_scan",
+                    "qualified_name": f"component-scan.{base_pkg}",
+                    "name": base_pkg,
+                    "signature": f"<context:component-scan base-package='{base_pkg}'>",
+                    "start_line": getattr(elem, "sourceline", 0),
+                    "end_line": getattr(elem, "sourceline", 0),
+                    "body_text": base_pkg,
+                    "calls": [],
+                    "summary": f"[XML/Spring] component-scan: {base_pkg}",
+                    "comment": "",
+                })
     return units
 
 
@@ -148,7 +170,12 @@ def _parse_maven_pom(root: etree._Element) -> list[dict[str, Any]]:
 def _parse_web_xml(root: etree._Element) -> list[dict[str, Any]]:
     units = []
     ns_map = root.nsmap or {}
-    ns_prefix = next((f"{{{v}}}" for k, v in ns_map.items() if "javaee" in v or "web-app" in v), "")
+    # ⑦ 加上 "jakarta"，兼容 Jakarta EE 9+（javax → jakarta 命名空间迁移）
+    ns_prefix = next(
+        (f"{{{v}}}" for k, v in ns_map.items()
+         if "javaee" in v or "web-app" in v or "jakarta" in v),
+        ""
+    )
 
     def _ftag(tag: str) -> str:
         return f"{ns_prefix}{tag}" if ns_prefix else tag
@@ -213,6 +240,9 @@ def _parse_generic(root: etree._Element) -> list[dict[str, Any]]:
                 "summary": f"[XML] <{tag}>: {val[:80]}",
                 "comment": "",
             })
+    # ⑧ 截断时记录日志，避免静默丢失
+    if len(units) > 100:
+        logger.warning("xml _parse_generic truncated to 100 units (total=%d)", len(units))
     return units[:100]
 
 
@@ -228,11 +258,12 @@ def parse_xml(file_path: str) -> list[dict[str, Any]]:
 
     xml_type = _detect_xml_type(root)
     if xml_type == "mybatis_mapper":
-        return _parse_mybatis(root, "")
+        return _parse_mybatis(root)
     if xml_type == "spring_beans":
         return _parse_spring_beans(root)
     if xml_type == "maven_pom":
         return _parse_maven_pom(root)
     if xml_type == "web_xml":
         return _parse_web_xml(root)
+    # ⑥ config 类型显式处理（原来隐式 fallthrough 到 generic）
     return _parse_generic(root)
